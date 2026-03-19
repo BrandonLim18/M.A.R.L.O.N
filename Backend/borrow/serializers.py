@@ -56,17 +56,26 @@ class BorrowingSerializer(serializers.ModelSerializer):
         NOTE: Book inventory, status changes, and history logging are handled
         in the view layer (BorrowingViewSet.create).
         """
-        # Ensure borrow_date exists
+       
         borrow_date = validated_data.get('borrow_date') or date.today()
         validated_data['borrow_date'] = borrow_date
 
-        # Auto-calculate due_date if missing
+       
         if not validated_data.get('due_date'):
             validated_data['due_date'] = borrow_date + timedelta(days=14)
 
         return super().create(validated_data)
 
 class HistorySerializer(serializers.ModelSerializer):
+    book_details = BookSerializer(source='transaction.book', read_only=True)
+    
+   
+    borrower_name = serializers.CharField(source='transaction.borrower.username', read_only=True)
+    borrower_contact = serializers.CharField(source='transaction.borrower.contact', read_only=True, default="N/A")
+    borrower_email = serializers.EmailField(source='transaction.borrower.email', read_only=True)
+    
+    overdue_days = serializers.ReadOnlyField()
+
     class Meta:
         model = History
         fields = '__all__'

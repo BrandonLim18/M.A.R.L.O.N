@@ -73,10 +73,19 @@ class Borrowing(models.Model):
 
 # 3. History Table
 class History(models.Model):
-    transaction = models.ForeignKey(Borrowing, on_delete=models.CASCADE, related_name='history_logs')
-    
+    transaction = models.ForeignKey('Borrowing', on_delete=models.CASCADE, related_name='history_logs')
     borrow_date = models.DateField()
     return_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return f"History Log for Transaction #{self.transaction.id}"
+
+    @property
+    def overdue_days(self):
+        due_date = self.transaction.due_date
+
+        end_date = self.return_date if self.return_date else date.today()
+        
+        if due_date and end_date > due_date:
+            return (end_date - due_date).days
+        return 0
