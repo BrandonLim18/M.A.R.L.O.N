@@ -5,15 +5,15 @@ from rest_framework.response import Response
 
 from .models import Book, Borrowing, History
 from .serializers import BookSerializer, BorrowingSerializer, HistorySerializer
-
+from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 class BookViewSet(viewsets.ModelViewSet):
     queryset = Book.objects.all()
     serializer_class = BookSerializer
-
+    permission_classes = [IsAuthenticatedOrReadOnly]
 class BorrowingViewSet(viewsets.ModelViewSet):
     queryset = Borrowing.objects.all()
     serializer_class = BorrowingSerializer
-
+    permission_classes = [IsAuthenticated]
     # 1. BORROWING LOGIC 
     
     def create(self, request, *args, **kwargs):
@@ -128,3 +128,4 @@ class BorrowingViewSet(viewsets.ModelViewSet):
 class HistoryViewSet(viewsets.ModelViewSet):
     queryset = History.objects.all()
     serializer_class = HistorySerializer
+    permission_classes = [IsAuthenticated]
