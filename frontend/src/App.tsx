@@ -5,10 +5,13 @@ import StatCard from "./components/StatCard";
 import BookFormModal from "./components/BookFormModal";
 import BorrowFormModal from "./components/BorrowFormModal";
 import ConfirmModal from "./components/ConfirmModal";
+import LoginPage from "./components/LoginPage";
+import ProfilePage from "./components/ProfilePage";
 import { api } from "./services/api";
 import { Book, Borrowing, HistoryItem } from "./types";
 
 function App() {
+ const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
 
   const [books, setBooks] = useState<Book[]>([]);
@@ -42,15 +45,28 @@ function App() {
       setBorrowings(borrowingsData);
       setHistory(historyData);
     } catch (err: any) {
-      setError(err.message || "Failed to fetch data.");
+      const message = err.message || "Failed to fetch data.";
+
+      if (
+        message.toLowerCase().includes("authentication credentials were not provided") ||
+        message.toLowerCase().includes("invalid token")
+      ) {
+        api.logout();
+        setIsLoggedIn(false);
+        return;
+      }
+
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAll();
-  }, []);
+    if (isLoggedIn) {
+      fetchAll();
+    }
+  }, [isLoggedIn]);
 
   const filteredBooks = useMemo(() => {
     return books.filter((book) =>
@@ -184,6 +200,12 @@ function App() {
     }
   };
 
+  const handleLogout = () => {
+  api.logout();
+  setIsLoggedIn(false);
+  setCurrentPage("dashboard");
+};
+
   const pageTitleMap: Record<string, { title: string; subtitle: string }> = {
     dashboard: {
       title: "Dashboard",
@@ -201,11 +223,30 @@ function App() {
       title: "History",
       subtitle: "Review completed return records and borrowing history.",
     },
+    profile: {
+      title: "Profile",
+      subtitle: "View personal account information.",
+    },
   };
+
+  if (!isLoggedIn) {
+    return (
+      <LoginPage
+        onLoginSuccess={() => {
+          setIsLoggedIn(true);
+          setCurrentPage("dashboard");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-50">
-      <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} />
+      <Sidebar
+  currentPage={currentPage}
+  setCurrentPage={setCurrentPage}
+  onLogout={handleLogout}
+/>
 
       <main className="flex-1 p-8">
         <Header
@@ -624,6 +665,9 @@ function App() {
                 </div>
               </div>
             )}
+
+           {currentPage === "profile" && (<ProfilePage borrowings={borrowings} history={history} />
+)}
           </>
         )}
 

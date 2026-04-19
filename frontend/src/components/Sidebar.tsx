@@ -1,25 +1,24 @@
 type Props = {
   currentPage: string;
   setCurrentPage: (page: string) => void;
+  onLogout: () => void;
 };
-
 
 const navItems = [
   { key: "dashboard", label: "Dashboard" },
   { key: "books", label: "Books" },
   { key: "borrowings", label: "Borrowings" },
   { key: "history", label: "History" },
+  { key: "profile", label: "Profile" },
 ];
 
-
-export default function Sidebar({ currentPage, setCurrentPage }: Props) {
+export default function Sidebar({ currentPage, setCurrentPage, onLogout }: Props) {
   return (
-    <aside className="w-72 bg-slate-900 text-white min-h-screen p-6 shadow-2xl">
+    <aside className="w-72 bg-slate-900 text-white min-h-screen p-6 shadow-2xl flex flex-col">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-wide">M.A.R.L.O.N</h1>
         <p className="text-slate-300 text-sm mt-2">Library Management System</p>
       </div>
-
 
       <nav className="space-y-2">
         {navItems.map((item) => (
@@ -36,6 +35,15 @@ export default function Sidebar({ currentPage, setCurrentPage }: Props) {
           </button>
         ))}
       </nav>
+
+      <div className="mt-auto pt-6">
+        <button
+          onClick={onLogout}
+          className="w-full text-left px-4 py-3 rounded-xl transition font-medium bg-red-500 text-white hover:bg-red-600"
+        >
+          Logout
+        </button>
+      </div>
     </aside>
   );
 }
