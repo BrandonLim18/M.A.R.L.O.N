@@ -16,11 +16,12 @@ export interface Borrowing {
   borrower_contact_number: string;
   borrower_email_address: string;
   book: number;
-  book_details?: Book;
   borrow_date: string;
   due_date: string;
   return_date: string | null;
-  overdue_days: number;
+  status: "Pending" | "Active" | "Returned"; // <-- Add this new field
+  overdue_days?: number;
+  book_details?: Book;
 }
 
 export interface HistoryItem {

@@ -23,6 +23,9 @@ class BorrowingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Borrowing
         fields = '__all__'
+        extra_kwargs = {
+            'due_date': {'required': False}
+        }
 
     def validate(self, attrs):
         """
