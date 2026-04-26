@@ -2,22 +2,33 @@ type Props = {
   currentPage: string;
   setCurrentPage: (page: string) => void;
   onLogout: () => void;
+  userRole?: "admin" | "borrower";
 };
 
-const navItems = [
+const adminNavItems = [
   { key: "dashboard", label: "Dashboard" },
-  { key: "books", label: "Books" },
+  { key: "books", label: "Books Management" },
   { key: "borrowings", label: "Borrowings" },
   { key: "history", label: "History" },
   { key: "profile", label: "Profile" },
 ];
 
-export default function Sidebar({ currentPage, setCurrentPage, onLogout }: Props) {
+const borrowerNavItems = [
+  { key: "dashboard", label: "Dashboard" },
+  { key: "books", label: "Available Books" },
+  { key: "my-borrowings", label: "My Borrowings" },
+  { key: "profile", label: "Profile" },
+];
+
+export default function Sidebar({ currentPage, setCurrentPage, onLogout, userRole }: Props) {
+  const navItems = userRole === "admin" ? adminNavItems : borrowerNavItems;
+
   return (
     <aside className="w-72 bg-slate-900 text-white min-h-screen p-6 shadow-2xl flex flex-col">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-wide">M.A.R.L.O.N</h1>
         <p className="text-slate-300 text-sm mt-2">Library Management System</p>
+        <p className="text-slate-400 text-xs mt-3 capitalize">Role: {userRole || "user"}</p>
       </div>
 
       <nav className="space-y-2">

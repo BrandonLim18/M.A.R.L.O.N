@@ -186,7 +186,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
               </div>
               <div className="text-center">
                 <p className="text-2xl font-bold text-slate-800">
-                  {borrowings.filter((b) => b.overdue_days > 0 && !b.return_date).length}
+                  {borrowings.filter((b) => (b.overdue_days || 0) > 0 && !b.return_date).length}
                 </p>
                 <p className="text-xs text-slate-500 uppercase tracking-wider">Overdue</p>
               </div>

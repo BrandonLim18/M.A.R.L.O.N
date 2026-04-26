@@ -10,6 +10,7 @@ export type ProfileData = {
   address: string | null;
   age: number | null;
   birthday: string | null;
+  role: "admin" | "borrower";
   username?: string;
 };
 
@@ -100,6 +101,15 @@ export const api = {
     return handleResponse<Borrowing>(res);
   },
 
+  borrowForMe: async (data: any): Promise<Borrowing> => {
+    const res = await fetch(`${API_BASE}/borrowings/borrow_for_me/`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse<Borrowing>(res);
+  },
+
   returnBook: async (id: number): Promise<Borrowing> => {
     const res = await fetch(`${API_BASE}/borrowings/${id}/return_book/`, {
       method: "POST",
@@ -108,11 +118,49 @@ export const api = {
     return handleResponse<Borrowing>(res);
   },
 
+  approveBorrowing: async (id: number): Promise<Borrowing> => {
+    const res = await fetch(`${API_BASE}/borrowings/${id}/approve/`, {
+      method: "POST",
+      headers: getHeaders(),
+    });
+    return handleResponse<Borrowing>(res);
+  },
+
+  rejectBorrowing: async (id: number): Promise<void> => {
+    const res = await fetch(`${API_BASE}/borrowings/${id}/reject/`, {
+      method: "POST",
+      headers: getHeaders(),
+    });
+    await handleResponse(res);
+  },
+
   login: async (credentials: { email: string; password: string }): Promise<{ token: string }> => {
     const res = await fetch(`${API_BASE}/accounts/login/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(credentials),
+    });
+    const data = await handleResponse<{ token: string }>(res);
+
+    if (data.token) {
+      localStorage.setItem("authToken", data.token);
+    }
+
+    return data;
+  },
+
+  register: async (userData: {
+    email: string;
+    password: string;
+    username: string;
+    first_name?: string;
+    last_name?: string;
+    //role: "admin" | "borrower";
+  }): Promise<{ token: string }> => {
+    const res = await fetch(`${API_BASE}/accounts/register/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData),
     });
     const data = await handleResponse<{ token: string }>(res);
 
