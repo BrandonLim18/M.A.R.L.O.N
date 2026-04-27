@@ -37,14 +37,42 @@ class RegisterView(APIView):
             )
             user.generate_otp() # Generates OTP and saves it to the user
 
-            # Send OTP via email
+            # --- START OF NEW HTML EMAIL DESIGN ---
+            html_content = f"""
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 24px; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <div style="text-align: center; padding-bottom: 20px; border-bottom: 2px solid #f1f5f9;">
+                    <h1 style="color: #0f172a; margin: 0; font-size: 32px; font-weight: 800; letter-spacing: -1px;">M.A.R.L.O.N</h1>
+                    <p style="color: #64748b; margin: 5px 0 0 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Library Management System</p>
+                </div>
+                
+                <div style="padding: 30px 0; text-align: center;">
+                    <h2 style="color: #334155; font-size: 22px; margin-bottom: 15px;">Verify Your Account</h2>
+                    <p style="color: #475569; font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
+                        Welcome aboard! To complete your registration, please enter the 6-digit activation code below into the verification screen.
+                    </p>
+                    
+                    <div style="background: linear-gradient(to right, #059669, #14b8a6); padding: 20px; border-radius: 16px; display: inline-block; margin-bottom: 20px;">
+                        <span style="font-size: 36px; font-weight: 900; color: #ffffff; letter-spacing: 10px;">{user.otp}</span>
+                    </div>
+                    
+                    <p style="color: #94a3b8; font-size: 13px; margin-top: 30px;">
+                        If you did not request this account creation, you can safely ignore and delete this email.
+                    </p>
+                </div>
+            </div>
+            """
+
+            # Send OTP via email using both plain text (fallback) and HTML
             send_mail(
-                "Your Account Verification Code",
-                f"Your verification code is: {user.otp}",
-                settings.DEFAULT_FROM_EMAIL, # Uses the email defined in settings.py
-                [email],
+                subject="Welcome to M.A.R.L.O.N - Your Activation Code",
+                message=f"Your verification code is: {user.otp}",
+                from_email=settings.DEFAULT_FROM_EMAIL, 
+                recipient_list=[email],
                 fail_silently=False,
+                html_message=html_content, # Magic parameter for HTML emails
             )
+            # --- END OF NEW HTML EMAIL DESIGN ---
+
             return Response({"message": "Registration successful. OTP sent to your email for verification."}, status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

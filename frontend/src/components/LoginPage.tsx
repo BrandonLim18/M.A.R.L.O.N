@@ -3,9 +3,10 @@ import { api } from "../services/api";
 
 interface LoginPageProps {
   onLoginSuccess: () => void;
+  onRegisterSuccess: (email: string) => void; // Added this line
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }: LoginPageProps) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess }) => { // Extracted it here
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +80,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }: LoginPageProps)
         first_name: firstName,
         last_name: lastName,
       });
-      onLoginSuccess();
+      onRegisterSuccess(email); // Changed this from onLoginSuccess to onRegisterSuccess
     } catch (err: any) {
       const msg = err.message || "Registration failed.";
       setError(msg);

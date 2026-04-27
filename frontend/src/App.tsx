@@ -8,7 +8,6 @@ import BorrowerBorrowModal from "./components/BorrowerBorrowModal";
 import MyBorrowings from "./components/MyBorrowings";
 import ConfirmModal from "./components/ConfirmModal";
 import LoginPage from "./components/LoginPage";
-import Register from "./components/Register";
 import VerifyEmail from "./components/VerifyEmail";
 import ProfilePage from "./components/Profilepage";
 import { api, ProfileData } from "./services/api";
@@ -298,28 +297,7 @@ function App() {
   };
 
   if (!isLoggedIn) {
-    if (authView === "login") {
-      return (
-        <LoginPage
-          onLoginSuccess={() => {
-            setIsLoggedIn(true);
-            setCurrentPage("dashboard");
-          }}
-          // Assuming LoginPage has a way to switch to Register,
-          // otherwise you can add a button below it.
-        />
-      );
-    } else if (authView === "register") {
-      return (
-        <Register
-          onSuccess={(email) => {
-            setEmailForVerification(email);
-            setAuthView("verify");
-          }}
-          onSwitchToLogin={() => setAuthView("login")}
-        />
-      );
-    } else if (authView === "verify") {
+    if (authView === "verify") {
       return (
         <VerifyEmail
           email={emailForVerification}
@@ -329,6 +307,20 @@ function App() {
         />
       );
     }
+
+    // Default fallback: LoginPage handles BOTH the Login and Register UIs
+    return (
+      <LoginPage
+        onLoginSuccess={() => {
+          setIsLoggedIn(true);
+          setCurrentPage("dashboard");
+        }}
+        onRegisterSuccess={(email) => {
+          setEmailForVerification(email);
+          setAuthView("verify");
+        }}
+      />
+    );
   }
 
   return (
