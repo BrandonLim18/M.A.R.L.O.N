@@ -29,6 +29,12 @@ class Book(models.Model):
 # 2. Borrowing Table
 class Borrowing(models.Model):
 
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('Active', 'Active'),
+        ('Returned', 'Returned'),
+    ]
+
     borrower_name = models.CharField(max_length=100)
     borrower_contact_number = models.CharField(max_length=15)
     borrower_email_address = models.EmailField()
@@ -39,6 +45,7 @@ class Borrowing(models.Model):
     borrow_date = models.DateField(default=date.today)
     due_date = models.DateField()
     return_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
 
     def __str__(self):
         return f"Transaction #{self.id}: {self.borrower_name} borrowed '{self.book.title}'"
