@@ -15,6 +15,7 @@ type EditableProfile = {
   birthday: string;
   role: string;
   bio: string;
+  profile_picture?: string;
 };
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
@@ -29,9 +30,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
     birthday: "",
     role: "Library User",
     bio: "No biography available.",
+    profile_picture: "",
   });
 
   const [formData, setFormData] = useState<EditableProfile>(userData);
+  const [newPicture, setNewPicture] = useState<File | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -50,8 +54,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
           address: profile.address || "No address provided",
           age: profile.age || 0,
           birthday: profile.birthday || "No birthday provided",
-          role: "System Administrator",
-          bio: "Profile data loaded from the backend.",
+          role: profile.role === "admin" ? "System Administrator" : "Library Borrower",
+          bio: profile.bio || "No biography available.",
+          profile_picture: profile.profile_picture || "",
         };
 
         setUserData(nextData);
@@ -108,15 +113,66 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
 
   const handleCancel = () => {
     setFormData(userData);
+    setNewPicture(null);
     setIsEditing(false);
   };
 
-  const handleSave = () => {
-    setUserData({
-      ...formData,
-      age: Number(formData.age) || 0,
-    });
-    setIsEditing(false);
+  const handleSave = async () => {
+    setSaveLoading(true);
+    try {
+      const form = new FormData();
+      const [firstName, ...lastNameParts] = formData.name.split(" ");
+      form.append("first_name", firstName || "");
+      form.append("last_name", lastNameParts.join(" ") || "");
+      
+      // Clean placeholders before sending
+      const cleanAddress = formData.address === "No address provided" ? "" : formData.address;
+      const cleanBirthday = formData.birthday === "No birthday provided" ? "" : formData.birthday;
+      
+      form.append("address", cleanAddress);
+      form.append("age", String(formData.age));
+      
+      if (cleanBirthday) {
+        form.append("birthday", cleanBirthday);
+      }
+      
+      if (newPicture) {
+        form.append("profile_picture", newPicture);
+      }
+      
+      form.append("bio", formData.bio);
+
+      const updatedProfile = await api.updateProfile(form);
+      
+      const fullName =
+        `${updatedProfile.first_name || ""} ${updatedProfile.last_name || ""}`.trim() ||
+        updatedProfile.username ||
+        updatedProfile.email ||
+        "User";
+
+      const nextData: EditableProfile = {
+        name: fullName,
+        email: updatedProfile.email || "",
+        address: updatedProfile.address || "No address provided",
+        age: updatedProfile.age || 0,
+        birthday: updatedProfile.birthday || "No birthday provided",
+        role: updatedProfile.role === "admin" ? "System Administrator" : "Library Borrower",
+        bio: updatedProfile.bio || "No biography available.",
+        profile_picture: updatedProfile.profile_picture || "",
+      };
+
+      setUserData(nextData);
+      setFormData(nextData);
+      setNewPicture(null);
+      setIsEditing(false);
+    } catch (err: any) {
+      console.error("Failed to update profile:", err);
+      // Try to extract a more descriptive error message
+      const errorMsg = err.message || "Failed to update profile. Please try again.";
+      alert(errorMsg);
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const handleChange = (
@@ -143,11 +199,31 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
         <div className="lg:col-span-1">
           <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-8 text-center">
             <div className="relative inline-block mb-6">
-              <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center text-white text-4xl font-bold shadow-inner">
-                {initials}
-              </div>
+              {userData.profile_picture ? (
+                 <img 
+                 src={userData.profile_picture.startsWith('http') ? userData.profile_picture : `http://localhost:8000${userData.profile_picture}`} 
+                 alt="Profile" 
+                 className="w-32 h-32 rounded-full object-cover shadow-inner border-4 border-white"
+               />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center text-white text-4xl font-bold shadow-inner">
+                  {initials}
+                </div>
+              )}
               <div className="absolute bottom-0 right-0 w-8 h-8 bg-emerald-500 border-4 border-white rounded-full"></div>
             </div>
+
+            {isEditing && (
+              <div className="mb-6">
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Change Photo</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => setNewPicture(e.target.files ? e.target.files[0] : null)}
+                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+            )}
 
             {isEditing ? (
               <>
@@ -248,9 +324,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
                 </p>
                 {isEditing ? (
                   <input
-                    type="text"
+                    type="date"
                     name="birthday"
-                    value={formData.birthday}
+                    value={formData.birthday === "No birthday provided" ? "" : formData.birthday}
                     onChange={handleChange}
                     className="w-full text-lg font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-400"
                   />

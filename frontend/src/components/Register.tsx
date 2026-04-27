@@ -8,6 +8,7 @@ interface RegisterProps {
 const Register: React.FC<RegisterProps> = ({ onSuccess, onSwitchToLogin }) => {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [profilePicture, setProfilePicture] = useState<File | null>(null);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -16,13 +17,19 @@ const Register: React.FC<RegisterProps> = ({ onSuccess, onSwitchToLogin }) => {
     setLoading(true);
     setError("");
 
+    const formData = new FormData();
+    formData.append("email", email);
+    formData.append("password", password);
+    if (profilePicture) {
+      formData.append("profile_picture", profilePicture);
+    }
+
     try {
       const response = await fetch(
         "http://localhost:8000/api/accounts/register/",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+          body: formData,
         },
       );
 
@@ -84,6 +91,23 @@ const Register: React.FC<RegisterProps> = ({ onSuccess, onSwitchToLogin }) => {
             onChange={(e) => setPassword(e.target.value)}
             required
             style={{ width: "100%", padding: "10px", boxSizing: "border-box" }}
+          />
+        </div>
+        <div style={{ marginBottom: "20px" }}>
+          <label
+            htmlFor="profilePicture"
+            style={{ display: "block", marginBottom: "5px" }}
+          >
+            Profile Picture (Optional)
+          </label>
+          <input
+            id="profilePicture"
+            type="file"
+            accept="image/*"
+            onChange={(e) =>
+              setProfilePicture(e.target.files ? e.target.files[0] : null)
+            }
+            style={{ width: "100%", padding: "5px", boxSizing: "border-box" }}
           />
         </div>
         {error && <p style={{ color: "red", fontSize: "0.9rem" }}>{error}</p>}

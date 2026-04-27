@@ -14,6 +14,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
+  const [profilePicture, setProfilePicture] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -73,14 +74,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
 
     try {
       setLoading(true);
-      await api.register({
-        email,
-        password,
-        username,
-        first_name: firstName,
-        last_name: lastName,
-      });
-      onRegisterSuccess(email); // Changed this from onLoginSuccess to onRegisterSuccess
+      const formData = new FormData();
+      formData.append("email", email);
+      formData.append("password", password);
+      formData.append("username", username);
+      formData.append("first_name", firstName);
+      formData.append("last_name", lastName);
+      if (profilePicture) {
+        formData.append("profile_picture", profilePicture);
+      }
+
+      await api.register(formData);
+      onRegisterSuccess(email);
     } catch (err: any) {
       const msg = err.message || "Registration failed.";
       setError(msg);
@@ -96,6 +101,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
     setFirstName("");
     setLastName("");
     setUsername("");
+    setProfilePicture(null);
     setError("");
   };
 
@@ -258,6 +264,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess
                 placeholder="••••••••"
                 className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Profile Picture (Optional)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setProfilePicture(e.target.files ? e.target.files[0] : null)}
+                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 outline-none transition-all"
               />
             </div>
 

@@ -15,6 +15,7 @@ class CustomUser(AbstractUser):
     address = models.CharField(max_length=255, blank=True, null=True)
     age = models.PositiveIntegerField(blank=True, null=True)
     birthday = models.DateField(blank=True, null=True)
+    bio = models.TextField(blank=True, null=True)
 
     # User role
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='borrower')
@@ -22,6 +23,9 @@ class CustomUser(AbstractUser):
     # Email verification fields
     otp = models.CharField(max_length=6, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
+
+    # Profile picture
+    profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
 
     
     USERNAME_FIELD = 'email'

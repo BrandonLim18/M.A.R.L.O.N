@@ -12,6 +12,8 @@ export type ProfileData = {
   birthday: string | null;
   role: "admin" | "borrower";
   username?: string;
+  profile_picture?: string;
+  bio?: string;
 };
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -23,6 +25,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
   }
 
   if (!response.ok) {
+    if (data && typeof data === 'object') {
+      const errorMsg = Object.entries(data)
+        .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(", ") : msgs}`)
+        .join("\n");
+      throw new Error(errorMsg || "Something went wrong.");
+    }
     throw new Error(data?.error || data?.detail || "Something went wrong.");
   }
 
@@ -149,26 +157,24 @@ export const api = {
     return data;
   },
 
-  register: async (userData: {
-    email: string;
-    password: string;
-    username: string;
-    first_name?: string;
-    last_name?: string;
-    //role: "admin" | "borrower";
-  }): Promise<{ token: string }> => {
+  register: async (formData: FormData): Promise<{ message: string }> => {
     const res = await fetch(`${API_BASE}/accounts/register/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(userData),
+      body: formData,
     });
-    const data = await handleResponse<{ token: string }>(res);
+    return handleResponse<{ message: string }>(res);
+  },
 
-    if (data.token) {
-      localStorage.setItem("authToken", data.token);
-    }
-
-    return data;
+  updateProfile: async (formData: FormData): Promise<ProfileData> => {
+    const token = localStorage.getItem("authToken");
+    const res = await fetch(`${API_BASE}/accounts/update-profile/`, {
+      method: "PUT",
+      headers: {
+        ...(token ? { Authorization: `Token ${token}` } : {}),
+      },
+      body: formData,
+    });
+    return handleResponse<ProfileData>(res);
   },
 
   logout: () => localStorage.removeItem("authToken"),

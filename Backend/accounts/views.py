@@ -6,13 +6,16 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
+from rest_framework.parsers import MultiPartParser, FormParser
 from .models import CustomUser 
+from .serializers import UserSerializer
 
 class RegisterView(APIView):
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
-        role = request.data.get('role', 'borrower') # Default role
+        role = request.data.get('role', 'borrower')
+        profile_picture = request.FILES.get('profile_picture')
 
         if not email or not password:
             return Response({"error": "Email and password are required."}, status=status.HTTP_400_BAD_REQUEST)
@@ -32,8 +35,9 @@ class RegisterView(APIView):
                 email=email,
                 password=password,
                 role=role,
-                is_active=False, # Important: user is inactive until OTP is verified
-                is_verified=False # Custom field for OTP verification status
+                profile_picture=profile_picture,
+                is_active=False,
+                is_verified=False
             )
             user.generate_otp() # Generates OTP and saves it to the user
 
@@ -79,17 +83,23 @@ class RegisterView(APIView):
 
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
+        serializer = UserSerializer(request.user, context={'request': request})
+        return Response(serializer.data)
+
+class ProfileUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def put(self, request):
         user = request.user
-        return Response({
-            "email": user.email,
-            "username": user.username,
-            "role": user.role,
-            "address": user.address,
-            "age": user.age,
-            "birthday": user.birthday,
-        })
+        serializer = UserSerializer(user, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class VerifyOTPView(APIView):
     def post(self, request):
