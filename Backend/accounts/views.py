@@ -9,6 +9,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import CustomUser 
 from .serializers import UserSerializer
+from datetime import datetime
 
 class RegisterView(APIView):
     def post(self, request):
@@ -28,10 +29,30 @@ class RegisterView(APIView):
             # If user exists but is NOT verified, delete the old record so they can try again
             existing_user.delete()
 
+        username = request.data.get('username', email)
+        
+        # Check if username is already taken by someone else
+        if CustomUser.objects.filter(username=username).exists():
+            return Response({"error": "This username is already taken. Please choose another."}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
+            first_name = request.data.get('first_name', '')
+            last_name = request.data.get('last_name', '')
+            address = request.data.get('address', '')
+            birthday_str = request.data.get('birthday')
+            
+            age = None
+            if birthday_str:
+                try:
+                    bday = datetime.strptime(birthday_str, '%Y-%m-%d')
+                    today = datetime.today()
+                    age = today.year - bday.year - ((today.month, today.day) < (bday.month, bday.day))
+                except ValueError:
+                    pass
+
             # Create user as inactive until verified
             user = CustomUser.objects.create_user(
-                username=email, # Using email as username for simplicity, adjust if needed
+                username=username, 
                 email=email,
                 password=password,
                 role=role,
@@ -39,6 +60,15 @@ class RegisterView(APIView):
                 is_active=False,
                 is_verified=False
             )
+            user.first_name = first_name
+            user.last_name = last_name
+            user.address = address
+            if birthday_str:
+                user.birthday = birthday_str
+            if age is not None:
+                user.age = age
+            user.save()
+
             user.generate_otp() # Generates OTP and saves it to the user
 
             # --- START OF NEW HTML EMAIL DESIGN ---
@@ -66,19 +96,25 @@ class RegisterView(APIView):
             </div>
             """
 
-            # Send OTP via email using both plain text (fallback) and HTML
-            send_mail(
-                subject="Welcome to M.A.R.L.O.N - Your Activation Code",
-                message=f"Your verification code is: {user.otp}",
-                from_email=settings.DEFAULT_FROM_EMAIL, 
-                recipient_list=[email],
-                fail_silently=False,
-                html_message=html_content, # Magic parameter for HTML emails
-            )
+            try:
+                # Send OTP via email using both plain text (fallback) and HTML
+                send_mail(
+                    subject="Welcome to M.A.R.L.O.N - Your Activation Code",
+                    message=f"Your verification code is: {user.otp}",
+                    from_email=settings.DEFAULT_FROM_EMAIL, 
+                    recipient_list=[email],
+                    fail_silently=False,
+                    html_message=html_content, # Magic parameter for HTML emails
+                )
+            except Exception as email_err:
+                user.delete() # Rollback user creation
+                print(f"Email Error: {email_err}") # Prints the exact reason to your console
+                return Response({"error": f"Failed to send email. Check SMTP settings. Details: {str(email_err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             # --- END OF NEW HTML EMAIL DESIGN ---
 
             return Response({"message": "Registration successful. OTP sent to your email for verification."}, status=status.HTTP_201_CREATED)
         except Exception as e:
+            print(f"Registration Error: {e}") # Prints the exact reason to your console
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ProfileView(APIView):
