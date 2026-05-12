@@ -1,327 +1,449 @@
-import React, { useState } from "react";
-import { api } from "../services/api";
+import React, { useEffect, useMemo, useState } from "react";
+import { Borrowing, HistoryItem } from "../types";
+import { api, ProfileData } from "../services/api";
 
-interface LoginPageProps {
-  onLoginSuccess: () => void;
-  onRegisterSuccess: (email: string) => void; // Added this line
-}
+type ProfilePageProps = {
+  borrowings: Borrowing[];
+  history: HistoryItem[];
+};
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onRegisterSuccess }) => { // Extracted it here
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [username, setUsername] = useState("");
-  const [profilePicture, setProfilePicture] = useState<File | null>(null);
-  const [address, setAddress] = useState("");
-  const [birthday, setBirthday] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+type EditableProfile = {
+  name: string;
+  email: string;
+  address: string;
+  age: number;
+  birthday: string;
+  role: string;
+  bio: string;
+  profile_picture?: string;
+};
 
-  const validateEmail = (email: string) => {
-    return email.includes("@");
-  };
+const ProfilePage: React.FC<ProfilePageProps> = ({ borrowings, history }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const [userData, setUserData] = useState<EditableProfile>({
+    name: "User",
+    email: "",
+    address: "",
+    age: 0,
+    birthday: "",
+    role: "Library User",
+    bio: "No biography available.",
+    profile_picture: "",
+  });
 
-    if (!validateEmail(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
+  const [formData, setFormData] = useState<EditableProfile>(userData);
+  const [newPicture, setNewPicture] = useState<File | null>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const profile: ProfileData = await api.getProfile();
 
-    try {
-      setLoading(true);
-      await api.login({ email, password });
-      onLoginSuccess();
-    } catch (err: any) {
-      const msg = err.message || "Login failed. Check your credentials.";
-      setError(msg.includes("401") ? "Invalid email or password" : msg);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const fullName =
+          `${profile.first_name || ""} ${profile.last_name || ""}`.trim() ||
+          profile.username ||
+          profile.email ||
+          "User";
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+        const nextData: EditableProfile = {
+          name: fullName,
+          email: profile.email || "",
+          address: profile.address || "No address provided",
+          age: profile.age || 0,
+          birthday: profile.birthday || "No birthday provided",
+          role: profile.role === "admin" ? "System Administrator" : "Library Borrower",
+          bio: profile.bio || "No biography available.",
+          profile_picture: profile.profile_picture || "",
+        };
 
-    if (!validateEmail(email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    if (!username.trim()) {
-      setError("Username is required.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append("email", email);
-      formData.append("password", password);
-      formData.append("username", username);
-      formData.append("first_name", firstName);
-      formData.append("last_name", lastName);
-      formData.append("address", address);
-      if (birthday) {
-        formData.append("birthday", birthday);
+        setUserData(nextData);
+        setFormData(nextData);
+      } catch (err) {
+        console.error("Failed to load profile:", err);
+      } finally {
+        setLoadingProfile(false);
       }
-      if (profilePicture) {
-        formData.append("profile_picture", profilePicture);
-      }
+    };
 
-      await api.register(formData);
-      onRegisterSuccess(email);
+    loadProfile();
+  }, []);
+
+  const initials = useMemo(() => {
+    return userData.name
+      .split(" ")
+      .filter(Boolean)
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 3);
+  }, [userData.name]);
+
+  const recentActivities = useMemo(() => {
+    const borrowActivities = borrowings.map((item) => ({
+      action: item.return_date ? "Returned" : "Borrowed",
+      book: item.book_details?.title || `Book ID: ${item.book}`,
+      date: item.return_date || item.borrow_date || "Recent",
+    }));
+
+    const historyActivities = history.map((item) => ({
+      action: "Completed",
+      book:
+        (item as any).book_details?.title ||
+        (item as any).book_title ||
+        `Transaction #${item.transaction}`,
+      date: item.return_date || item.borrow_date || "Recent",
+    }));
+
+    const profileActivity = {
+      action: "Updated",
+      book: "Profile Information",
+      date: "Recently",
+    };
+
+    return [...borrowActivities, ...historyActivities, profileActivity].slice(0, 5);
+  }, [borrowings, history]);
+
+  const handleEditToggle = () => {
+    setFormData(userData);
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setFormData(userData);
+    setNewPicture(null);
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    setSaveLoading(true);
+    try {
+      const form = new FormData();
+      const [firstName, ...lastNameParts] = formData.name.split(" ");
+      form.append("first_name", firstName || "");
+      form.append("last_name", lastNameParts.join(" ") || "");
+      
+      // Clean placeholders before sending
+      const cleanAddress = formData.address === "No address provided" ? "" : formData.address;
+      const cleanBirthday = formData.birthday === "No birthday provided" ? "" : formData.birthday;
+      
+      form.append("address", cleanAddress);
+      form.append("age", String(formData.age));
+      
+      if (cleanBirthday) {
+        form.append("birthday", cleanBirthday);
+      }
+      
+      if (newPicture) {
+        form.append("profile_picture", newPicture);
+      }
+      
+      form.append("bio", formData.bio);
+
+      const updatedProfile = await api.updateProfile(form);
+      
+      const fullName =
+        `${updatedProfile.first_name || ""} ${updatedProfile.last_name || ""}`.trim() ||
+        updatedProfile.username ||
+        updatedProfile.email ||
+        "User";
+
+      const nextData: EditableProfile = {
+        name: fullName,
+        email: updatedProfile.email || "",
+        address: updatedProfile.address || "No address provided",
+        age: updatedProfile.age || 0,
+        birthday: updatedProfile.birthday || "No birthday provided",
+        role: updatedProfile.role === "admin" ? "System Administrator" : "Library Borrower",
+        bio: updatedProfile.bio || "No biography available.",
+        profile_picture: updatedProfile.profile_picture || "",
+      };
+
+      setUserData(nextData);
+      setFormData(nextData);
+      setNewPicture(null);
+      setIsEditing(false);
     } catch (err: any) {
-      const msg = err.message || "Registration failed.";
-      setError(msg);
+      console.error("Failed to update profile:", err);
+      const errorMsg = err.message || "Failed to update profile. Please try again.";
+      alert(errorMsg);
     } finally {
-      setLoading(false);
+      setSaveLoading(false);
     }
   };
 
-  const resetForm = () => {
-    setEmail("");
-    setPassword("");
-    setConfirmPassword("");
-    setFirstName("");
-    setLastName("");
-    setUsername("");
-    setAddress("");
-    setBirthday("");
-    setProfilePicture(null);
-    setError("");
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: name === "age" ? Number(value) : value,
+    }));
   };
 
-  const switchMode = (newMode: "login" | "register") => {
-    setMode(newMode);
-    resetForm();
-  };
+  if (loadingProfile) {
+    return (
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-8 text-slate-600">
+        Loading profile...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-50 p-6">
-      <div className="w-full max-w-md bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl border border-white/60 p-8">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-slate-800 tracking-tight">M.A.R.L.O.N</h1>
-          <p className="text-slate-500 mt-2">Library Management System</p>
-        </div>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1">
+          <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-8 text-center">
+            <div className="relative inline-block mb-6">
+              {userData.profile_picture ? (
+                 <img 
+                 src={userData.profile_picture.startsWith('http') ? userData.profile_picture : `http://localhost:8000${userData.profile_picture}`} 
+                 alt="Profile" 
+                 className="w-32 h-32 rounded-full object-cover shadow-inner border-4 border-white"
+               />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-blue-600 to-cyan-400 flex items-center justify-center text-white text-4xl font-bold shadow-inner">
+                  {initials}
+                </div>
+              )}
+              <div className="absolute bottom-0 right-0 w-8 h-8 bg-emerald-500 border-4 border-white rounded-full"></div>
+            </div>
 
-        {/* Mode Tabs */}
-        <div className="flex gap-2 mb-8">
-          <button
-            onClick={() => switchMode("login")}
-            className={`flex-1 py-3 rounded-2xl font-semibold transition-all ${
-              mode === "login"
-                ? "bg-blue-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            Login
-          </button>
-          <button
-            onClick={() => switchMode("register")}
-            className={`flex-1 py-3 rounded-2xl font-semibold transition-all ${
-              mode === "register"
-                ? "bg-emerald-600 text-white"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-            }`}
-          >
-            Register
-          </button>
-        </div>
-
-        {/* Login Form */}
-        {mode === "login" && (
-          <form onSubmit={handleLogin} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-2xl text-sm animate-pulse">
-                {error}
+            {isEditing && (
+              <div className="mb-6">
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-2">Change Photo</label>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={(e) => setNewPicture(e.target.files ? e.target.files[0] : null)}
+                  className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
               </div>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Email Address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center ${
-                loading ? "opacity-70 cursor-not-allowed" : ""
-              }`}
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
-        )}
-
-        {/* Register Form */}
-        {mode === "register" && (
-          <form onSubmit={handleRegister} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-2xl text-sm animate-pulse">
-                {error}
-              </div>
+            {isEditing ? (
+              <>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className="w-full text-center text-2xl font-bold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-blue-400"
+                />
+                <input
+                  type="text"
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  className="w-full mt-3 text-center text-blue-600 font-semibold bg-white border border-slate-200 rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold text-slate-800">{userData.name}</h2>
+                <p className="text-blue-600 font-semibold">{userData.role}</p>
+              </>
             )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Choose a username"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Email Address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700 ml-1">First Name</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="First name"
-                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                />
+            <div className="mt-6 pt-6 border-t border-slate-100 flex justify-around">
+              {/* Only admins see the total borrows */}
+              {userData.role === "System Administrator" && (
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-slate-800">{borrowings.length}</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Borrows</p>
+                </div>
+              )}
+              <div className="text-center">
+                <p className="text-2xl font-bold text-slate-800">
+                  {borrowings.filter((b) => !b.return_date).length}
+                </p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Active</p>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700 ml-1">Last Name</label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Last name"
-                  className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                />
+              <div className="text-center">
+                <p className="text-2xl font-bold text-slate-800">
+                  {borrowings.filter((b) => (b.overdue_days || 0) > 0 && !b.return_date).length}
+                </p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Overdue</p>
               </div>
             </div>
+          </div>
+        </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Address</label>
-              <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="Complete address"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                required
-              />
+        <div className="lg:col-span-2">
+          <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-8 h-full">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-2xl font-bold text-slate-800">Personal Information</h3>
+
+              {isEditing ? (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCancel}
+                    className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition"
+                  >
+                    Save Profile
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleEditToggle}
+                  className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-semibold hover:bg-slate-200 transition"
+                >
+                  Edit Profile
+                </button>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Birthday</label>
-              <input
-                type="date"
-                value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                required
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                  Email Address
+                </p>
+                {isEditing ? (
+                  <input
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    className="w-full text-lg font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                ) : (
+                  <p className="text-lg font-semibold text-slate-800">{userData.email}</p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                  Birthday
+                </p>
+                {isEditing ? (
+                  <input
+                    type="date"
+                    name="birthday"
+                    value={formData.birthday === "No birthday provided" ? "" : formData.birthday}
+                    onChange={handleChange}
+                    className="w-full text-lg font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                ) : (
+                  <p className="text-lg font-semibold text-slate-800">{userData.birthday}</p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                  Age
+                </p>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    name="age"
+                    value={formData.age}
+                    onChange={handleChange}
+                    className="w-full text-lg font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                ) : (
+                  <p className="text-lg font-semibold text-slate-800">
+                    {userData.age} Years Old
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                  Address
+                </p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleChange}
+                    className="w-full text-lg font-semibold text-slate-800 bg-white border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                ) : (
+                  <p className="text-lg font-semibold text-slate-800">{userData.address}</p>
+                )}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                required
-              />
+            <div className="mt-10">
+              <h4 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+                Biography
+              </h4>
+              {isEditing ? (
+                <textarea
+                  name="bio"
+                  value={formData.bio}
+                  onChange={handleChange}
+                  rows={4}
+                  className="w-full text-slate-600 leading-relaxed bg-white p-5 rounded-2xl border border-slate-200 outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              ) : (
+                <p className="text-slate-600 leading-relaxed bg-slate-50 p-5 rounded-2xl border border-slate-100 italic">
+                  "{userData.bio}"
+                </p>
+              )}
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Confirm Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white focus:ring-4 focus:ring-emerald-100 focus:border-emerald-400 outline-none transition-all"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Profile Picture (Optional)</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setProfilePicture(e.target.files ? e.target.files[0] : null)}
-                className="w-full px-5 py-4 rounded-2xl border border-slate-200 bg-white/50 focus:bg-white text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 outline-none transition-all"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center ${
-                loading ? "opacity-70 cursor-not-allowed" : ""
-              }`}
-            >
-              {loading ? "Creating account..." : "Create Account"}
-            </button>
-          </form>
-        )}
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-8">
+        <h3 className="text-2xl font-bold text-slate-800 mb-6">Recent Activity</h3>
+        <div className="space-y-4">
+          {recentActivities.length === 0 ? (
+            <p className="text-slate-500">No recent activity found.</p>
+          ) : (
+            recentActivities.map((item, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-4 rounded-2xl bg-white border border-slate-100 shadow-sm hover:border-blue-200 transition"
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      item.action === "Borrowed"
+                        ? "bg-emerald-100 text-emerald-600"
+                        : item.action === "Returned" || item.action === "Completed"
+                          ? "bg-blue-100 text-blue-600"
+                          : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <span className="text-xs font-bold">{item.action[0]}</span>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-800">
+                      {item.action}{" "}
+                      <span className="text-slate-500 font-normal">"{item.book}"</span>
+                    </p>
+                    <p className="text-xs text-slate-400 font-medium">{item.date}</p>
+                  </div>
+                </div>
+                <button className="text-slate-400 hover:text-slate-600 transition">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-export default LoginPage;
+export default ProfilePage;

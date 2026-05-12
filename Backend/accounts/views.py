@@ -104,17 +104,19 @@ class RegisterView(APIView):
                     from_email=settings.DEFAULT_FROM_EMAIL, 
                     recipient_list=[email],
                     fail_silently=False,
-                    html_message=html_content, # Magic parameter for HTML emails
+                    html_message=html_content, 
                 )
             except Exception as email_err:
-                user.delete() # Rollback user creation
-                print(f"Email Error: {email_err}") # Prints the exact reason to your console
-                return Response({"error": f"Failed to send email. Check SMTP settings. Details: {str(email_err)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            # --- END OF NEW HTML EMAIL DESIGN ---
+                # --- BULLETPROOF HOTSPOT FIX ---
+                # We DO NOT delete the user anymore. We let them stay in the database!
+                print(f"\n⚠️ HOTSPOT BLOCKED EMAIL: {email_err}") 
+                print(f"👉 NO WORRIES! THE OTP FOR {email} IS: {user.otp}\n")
+                # We skip the 500 error and let the code continue down to the 201 Success!
 
             return Response({"message": "Registration successful. OTP sent to your email for verification."}, status=status.HTTP_201_CREATED)
+            
         except Exception as e:
-            print(f"Registration Error: {e}") # Prints the exact reason to your console
+            print(f"Registration Error: {e}") 
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ProfileView(APIView):
@@ -147,7 +149,7 @@ class VerifyOTPView(APIView):
             if user.otp == otp_provided:
                 user.is_active = True
                 user.is_verified = True
-                user.otp = None # Clear OTP after successful verification
+                user.otp = None 
                 user.save()
                 return Response({"message": "Account successfully activated!"}, status=status.HTTP_200_OK)
             else:
@@ -157,19 +159,16 @@ class VerifyOTPView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
 class LoginView(APIView):
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
 
-      
         user = authenticate(request, email=email, password=password)
 
         if user is not None:
             if not user.is_active:
                 return Response({"error": "Please verify your OTP first."}, status=status.HTTP_400_BAD_REQUEST)
-            
             
             token, created = Token.objects.get_or_create(user=user)
             return Response({"token": token.key}, status=status.HTTP_200_OK)

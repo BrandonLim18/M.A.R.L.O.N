@@ -9,12 +9,14 @@ import MyBorrowings from "./components/MyBorrowings";
 import ConfirmModal from "./components/ConfirmModal";
 import LoginPage from "./components/LoginPage";
 import VerifyEmail from "./components/VerifyEmail";
-import ProfilePage from "./components/Profilepage";
+import Profilepage from "./components/Profilepage";
 import { api, ProfileData } from "./services/api";
 import { Book, Borrowing, HistoryItem } from "./types";
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // FIX IMPLEMENTED HERE: Check localStorage instantly when the app loads!
+  const [isLoggedIn, setIsLoggedIn] = useState(() => api.isAuthenticated());
+  
   const [authView, setAuthView] = useState<"login" | "register" | "verify">(
     "login",
   );
@@ -934,7 +936,7 @@ function App() {
             )}
 
             {currentPage === "profile" && (
-              <ProfilePage borrowings={borrowings} history={history} />
+              <Profilepage borrowings={borrowings} history={history} />
             )}
           </>
         )}
