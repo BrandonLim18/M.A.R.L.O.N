@@ -13,10 +13,20 @@ import Profilepage from "./components/Profilepage";
 import { api, ProfileData } from "./services/api";
 import { Book, Borrowing, HistoryItem } from "./types";
 
+const GENRES = [
+  "All",
+  "Romance",
+  "Fantasy",
+  "Science Fiction",
+  "Historical Fiction",
+  "Networking & Systems Administration",
+  "Programming & Software Development",
+  "Other",
+];
+
 function App() {
-  // FIX IMPLEMENTED HERE: Check localStorage instantly when the app loads!
   const [isLoggedIn, setIsLoggedIn] = useState(() => api.isAuthenticated());
-  
+
   const [authView, setAuthView] = useState<"login" | "register" | "verify">(
     "login",
   );
@@ -41,6 +51,7 @@ function App() {
   const [bookSearch, setBookSearch] = useState("");
   const [borrowingSearch, setBorrowingSearch] = useState("");
   const [historySearch, setHistorySearch] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState("All"); // New state for filtering
 
   const fetchProfile = async () => {
     try {
@@ -56,19 +67,16 @@ function App() {
     try {
       setLoading(true);
       setError("");
-
       const [booksData, borrowingsData, historyData] = await Promise.all([
         api.getBooks(),
         api.getBorrowings(),
         api.getHistory(),
       ]);
-
       setBooks(booksData);
       setBorrowings(borrowingsData);
       setHistory(historyData);
     } catch (err: any) {
       const message = err.message || "Failed to fetch data.";
-
       if (
         message
           .toLowerCase()
@@ -79,7 +87,6 @@ function App() {
         setIsLoggedIn(false);
         return;
       }
-
       setError(message);
     } finally {
       setLoading(false);
@@ -93,14 +100,25 @@ function App() {
     }
   }, [isLoggedIn]);
 
+  // UPDATED: Now filters by both Search Text AND Genre
   const filteredBooks = useMemo(() => {
-    return books.filter((book) =>
-      [book.title, book.author, book.genre || "", book.isbn || ""]
+    return books.filter((book) => {
+      const matchesSearch = [
+        book.title,
+        book.author,
+        book.genre || "",
+        book.isbn || "",
+      ]
         .join(" ")
         .toLowerCase()
-        .includes(bookSearch.toLowerCase()),
-    );
-  }, [books, bookSearch]);
+        .includes(bookSearch.toLowerCase());
+
+      const matchesGenre =
+        selectedGenre === "All" || book.genre === selectedGenre;
+
+      return matchesSearch && matchesGenre;
+    });
+  }, [books, bookSearch, selectedGenre]);
 
   const activeBorrowings = useMemo(
     () => borrowings.filter((item) => !item.return_date),
@@ -129,7 +147,6 @@ function App() {
       const relatedBorrowing = borrowings.find(
         (b) => b.id === historyItem.transaction,
       );
-
       return {
         ...historyItem,
         borrower_name: relatedBorrowing?.borrower_name || "-",
@@ -166,7 +183,6 @@ function App() {
     () => books.filter((b) => b.copies_available > 0).length,
     [books],
   );
-
   const overdueCount = useMemo(
     () =>
       activeBorrowings.filter((item) => (item.overdue_days || 0) > 0).length,
@@ -185,7 +201,6 @@ function App() {
 
   const handleEditBook = async (data: Partial<Book>) => {
     if (!editingBook) return;
-
     try {
       await api.updateBook(editingBook.id, data);
       setEditingBook(null);
@@ -198,7 +213,6 @@ function App() {
 
   const handleDeleteBook = async () => {
     if (!deleteBookId) return;
-
     try {
       await api.deleteBook(deleteBookId);
       setDeleteBookId(null);
@@ -299,18 +313,13 @@ function App() {
   };
 
   if (!isLoggedIn) {
-    if (authView === "verify") {
+    if (authView === "verify")
       return (
         <VerifyEmail
           email={emailForVerification}
-          onSuccess={() => {
-            setAuthView("login");
-          }}
+          onSuccess={() => setAuthView("login")}
         />
       );
-    }
-
-    // Default fallback: LoginPage handles BOTH the Login and Register UIs
     return (
       <LoginPage
         onLoginSuccess={() => {
@@ -325,6 +334,25 @@ function App() {
     );
   }
 
+  // --- REUSABLE GENRE FILTER COMPONENT ---
+  const GenreFilter = ({ activeColor }: { activeColor: string }) => (
+    <div className="flex gap-2 overflow-x-auto pb-4 mb-4 scrollbar-hide w-full mask-edges">
+      {GENRES.map((genre) => (
+        <button
+          key={genre}
+          onClick={() => setSelectedGenre(genre)}
+          className={`px-5 py-2.5 rounded-full whitespace-nowrap text-sm font-bold transition-all shadow-sm ${
+            selectedGenre === genre
+              ? `${activeColor} text-white ring-2 ring-offset-2 ring-blue-100`
+              : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+          }`}
+        >
+          {genre}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-cyan-50">
       <Sidebar
@@ -334,7 +362,7 @@ function App() {
         userRole={userRole || undefined}
       />
 
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-8 overflow-hidden flex flex-col">
         <Header
           title={pageTitleMap[currentPage]?.title || "Dashboard"}
           subtitle={pageTitleMap[currentPage]?.subtitle || ""}
@@ -351,7 +379,7 @@ function App() {
             Loading data...
           </div>
         ) : (
-          <>
+          <div className="overflow-y-auto pr-2 pb-10 flex-1">
             {currentPage === "dashboard" && userRole === "admin" && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
@@ -388,15 +416,7 @@ function App() {
                             </p>
                           </div>
                           <span
-                            className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                              item.return_date
-                                ? "bg-slate-200 text-slate-700"
-                                : item.status === "Pending"
-                                  ? "bg-slate-100 text-slate-600"
-                                  : (item.overdue_days || 0) > 0
-                                    ? "bg-red-100 text-red-700"
-                                    : "bg-emerald-100 text-emerald-700"
-                            }`}
+                            className={`text-xs px-3 py-1 rounded-full font-semibold ${item.return_date ? "bg-slate-200 text-slate-700" : item.status === "Pending" ? "bg-slate-100 text-slate-600" : (item.overdue_days || 0) > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
                           >
                             {item.return_date
                               ? "Returned"
@@ -428,7 +448,6 @@ function App() {
                           Register a new book in the system.
                         </p>
                       </button>
-
                       <button
                         onClick={() => setCurrentPage("books")}
                         className="rounded-3xl bg-gradient-to-r from-amber-500 to-orange-500 text-white p-5 text-left shadow-lg hover:scale-[1.02] transition"
@@ -438,7 +457,6 @@ function App() {
                           Edit or remove book records.
                         </p>
                       </button>
-
                       <button
                         onClick={() => setCurrentPage("history")}
                         className="rounded-3xl bg-gradient-to-r from-violet-600 to-fuchsia-500 text-white p-5 text-left shadow-lg hover:scale-[1.02] transition"
@@ -448,7 +466,6 @@ function App() {
                           Check completed borrowing records.
                         </p>
                       </button>
-
                       <button
                         onClick={() => setCurrentPage("borrowings")}
                         className="rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-5 text-left shadow-lg hover:scale-[1.02] transition"
@@ -477,14 +494,13 @@ function App() {
                   />
                   <StatCard label="Overdue Items" value={overdueCount} />
                 </div>
-
                 <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-lg border border-white/60 p-6">
                   <h3 className="text-2xl font-bold text-slate-800 mb-5">
                     Quick Actions
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <button
-                      onClick={() => setBorrowModalOpen(true)}
+                      onClick={() => setCurrentPage("books")}
                       className="rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white p-5 text-left shadow-lg hover:scale-[1.02] transition"
                     >
                       <p className="font-bold text-lg">Borrow a Book</p>
@@ -492,7 +508,6 @@ function App() {
                         Browse and borrow from available books.
                       </p>
                     </button>
-
                     <button
                       onClick={() => setCurrentPage("my-borrowings")}
                       className="rounded-3xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white p-5 text-left shadow-lg hover:scale-[1.02] transition"
@@ -509,7 +524,8 @@ function App() {
 
             {currentPage === "books" && userRole === "admin" && (
               <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-7">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                {/* Search & Header Row */}
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                   <input
                     type="text"
                     placeholder="Search by title, author, genre, or ISBN"
@@ -517,31 +533,43 @@ function App() {
                     onChange={(e) => setBookSearch(e.target.value)}
                     className="w-full md:max-w-xl rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
-
                   <button
                     onClick={() => {
                       setEditingBook(null);
                       setBookModalOpen(true);
                     }}
-                    className="px-6 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold shadow-lg hover:scale-[1.02] transition"
+                    className="px-6 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold shadow-lg hover:scale-[1.02] transition whitespace-nowrap"
                   >
-                    Add Book
+                    + Add Book
                   </button>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl">
-                  <table className="w-full text-left min-w-[1000px]">
-                    <thead>
+                {/* Genre Filter Pills */}
+                <GenreFilter activeColor="bg-blue-600" />
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                  <table className="w-full text-left min-w-[1000px] bg-white">
+                    <thead className="bg-slate-50">
                       <tr className="text-slate-600 border-b border-slate-200">
-                        <th className="py-4 pr-4 font-bold">Title</th>
-                        <th className="py-4 pr-4 font-bold">Author</th>
-                        <th className="py-4 pr-4 font-bold">ISBN</th>
-                        <th className="py-4 pr-4 font-bold">Genre</th>
-                        <th className="py-4 pr-4 font-bold">Year</th>
-                        <th className="py-4 pr-4 font-bold">Available</th>
-                        <th className="py-4 pr-4 font-bold">Borrowed</th>
-                        <th className="py-4 pr-4 font-bold">Status</th>
-                        <th className="py-4 pr-4 font-bold">Actions</th>
+                        <th className="py-4 px-4 font-bold rounded-tl-2xl">
+                          Title
+                        </th>
+                        <th className="py-4 px-4 font-bold">Author</th>
+                        <th className="py-4 px-4 font-bold">Category</th>
+                        <th className="py-4 px-4 font-bold">ISBN</th>
+                        <th className="py-4 px-4 font-bold">Year</th>
+                        <th className="py-4 px-4 font-bold text-center">
+                          Available
+                        </th>
+                        <th className="py-4 px-4 font-bold text-center">
+                          Borrowed
+                        </th>
+                        <th className="py-4 px-4 font-bold text-center">
+                          Status
+                        </th>
+                        <th className="py-4 px-4 font-bold rounded-tr-2xl text-right">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -550,54 +578,52 @@ function App() {
                           key={book.id}
                           className="border-b border-slate-100 hover:bg-blue-50/60 transition"
                         >
-                          <td className="py-5 pr-4 font-semibold text-slate-800">
+                          <td className="py-4 px-4 font-bold text-slate-800">
                             {book.title}
                           </td>
-                          <td className="py-5 pr-4 text-slate-700">
+                          <td className="py-4 px-4 text-slate-700 font-medium">
                             {book.author}
                           </td>
-                          <td className="py-5 pr-4 text-slate-700">
+                          <td className="py-4 px-4">
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
+                              {book.genre || "Other"}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-slate-500 text-sm">
                             {book.isbn || "-"}
                           </td>
-                          <td className="py-5 pr-4 text-slate-700">
-                            {book.genre || "-"}
-                          </td>
-                          <td className="py-5 pr-4 text-slate-700">
+                          <td className="py-4 px-4 text-slate-500">
                             {book.year_published || "-"}
                           </td>
-                          <td className="py-5 pr-4 font-semibold text-slate-800">
+                          <td className="py-4 px-4 font-bold text-slate-800 text-center">
                             {book.copies_available}
                           </td>
-                          <td className="py-5 pr-4 font-semibold text-slate-800">
+                          <td className="py-4 px-4 font-bold text-slate-800 text-center">
                             {book.copies_borrowed}
                           </td>
-                          <td className="py-5 pr-4">
+                          <td className="py-4 px-4 text-center">
                             <span
-                              className={`text-xs px-4 py-2 rounded-full font-bold ${
-                                book.copies_available > 0
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-red-100 text-red-700"
-                              }`}
+                              className={`text-xs px-3 py-1.5 rounded-full font-bold ${book.copies_available > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
                             >
                               {book.copies_available > 0
                                 ? "Available"
                                 : "Borrowed"}
                             </span>
                           </td>
-                          <td className="py-5 pr-4">
-                            <div className="flex gap-2">
+                          <td className="py-4 px-4">
+                            <div className="flex justify-end gap-2">
                               <button
                                 onClick={() => {
                                   setEditingBook(book);
                                   setBookModalOpen(true);
                                 }}
-                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium shadow hover:opacity-95"
+                                className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
                               >
                                 Edit
                               </button>
                               <button
                                 onClick={() => setDeleteBookId(book.id)}
-                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-500 text-white font-medium shadow hover:opacity-95"
+                                className="px-4 py-2 rounded-xl bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition"
                               >
                                 Delete
                               </button>
@@ -605,14 +631,13 @@ function App() {
                           </td>
                         </tr>
                       ))}
-
                       {filteredBooks.length === 0 && (
                         <tr>
                           <td
                             colSpan={9}
-                            className="py-10 text-center text-slate-500"
+                            className="py-16 text-center text-slate-500 font-medium text-lg"
                           >
-                            No books found.
+                            No books found in this category.
                           </td>
                         </tr>
                       )}
@@ -624,82 +649,93 @@ function App() {
 
             {currentPage === "books" && userRole === "borrower" && (
               <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-7">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                {/* Search Row */}
+                <div className="mb-4">
                   <input
                     type="text"
                     placeholder="Search by title, author, genre, or ISBN"
                     value={bookSearch}
                     onChange={(e) => setBookSearch(e.target.value)}
-                    className="w-full md:max-w-xl rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                   />
-
-                  <button
-                    onClick={() => setBorrowModalOpen(true)}
-                    className="px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-semibold shadow-lg hover:scale-[1.02] transition"
-                  >
-                    Borrow a Book
-                  </button>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl">
-                  <table className="w-full text-left min-w-[900px]">
-                    <thead>
+                {/* Genre Filter Pills */}
+                <GenreFilter activeColor="bg-emerald-600" />
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-100">
+                  <table className="w-full text-left min-w-[900px] bg-white">
+                    <thead className="bg-slate-50">
                       <tr className="text-slate-600 border-b border-slate-200">
-                        <th className="py-4 pr-4 font-bold">Title</th>
-                        <th className="py-4 pr-4 font-bold">Author</th>
-                        <th className="py-4 pr-4 font-bold">Genre</th>
-                        <th className="py-4 pr-4 font-bold">Year</th>
-                        <th className="py-4 pr-4 font-bold">
-                          Copies Available
+                        <th className="py-4 px-4 font-bold rounded-tl-2xl">
+                          Title
                         </th>
-                        <th className="py-4 pr-4 font-bold">Action</th>
+                        <th className="py-4 px-4 font-bold">Author</th>
+                        <th className="py-4 px-4 font-bold">Category</th>
+                        <th className="py-4 px-4 font-bold">Year</th>
+                        <th className="py-4 px-4 font-bold text-center">
+                          Status
+                        </th>
+                        <th className="py-4 px-4 font-bold rounded-tr-2xl text-right">
+                          Action
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredBooks
-                        .filter((b) => b.copies_available > 0)
-                        .map((book) => (
+                      {filteredBooks.map((book) => {
+                        const isAvailable = book.copies_available > 0;
+                        return (
                           <tr
                             key={book.id}
-                            className="border-b border-slate-100 hover:bg-blue-50/60 transition"
+                            className="border-b border-slate-100 hover:bg-emerald-50/40 transition"
                           >
-                            <td className="py-5 pr-4 font-semibold text-slate-800">
+                            <td className="py-5 px-4 font-bold text-slate-800">
                               {book.title}
                             </td>
-                            <td className="py-5 pr-4 text-slate-700">
+                            <td className="py-5 px-4 text-slate-700 font-medium">
                               {book.author}
                             </td>
-                            <td className="py-5 pr-4 text-slate-700">
-                              {book.genre || "-"}
+                            <td className="py-5 px-4">
+                              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+                                {book.genre || "Other"}
+                              </span>
                             </td>
-                            <td className="py-5 pr-4 text-slate-700">
+                            <td className="py-5 px-4 text-slate-500">
                               {book.year_published || "-"}
                             </td>
-                            <td className="py-5 pr-4 font-semibold text-emerald-600">
-                              {book.copies_available} available
+                            <td className="py-5 px-4 text-center">
+                              {isAvailable ? (
+                                <span className="text-sm font-bold text-emerald-600">
+                                  {book.copies_available} Available
+                                </span>
+                              ) : (
+                                <span className="text-sm font-bold text-slate-400">
+                                  Currently Borrowed
+                                </span>
+                              )}
                             </td>
-                            <td className="py-5 pr-4">
+                            <td className="py-5 px-4 flex justify-end">
                               <button
+                                disabled={!isAvailable}
                                 onClick={() => {
                                   setEditingBook(book);
                                   setBorrowModalOpen(true);
                                 }}
-                                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-medium shadow hover:opacity-95"
+                                className={`px-5 py-2.5 rounded-xl font-bold shadow-sm transition ${isAvailable ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
                               >
-                                Borrow
+                                Request Borrow
                               </button>
                             </td>
                           </tr>
-                        ))}
-
-                      {filteredBooks.filter((b) => b.copies_available > 0)
-                        .length === 0 && (
+                        );
+                      })}
+                      {filteredBooks.length === 0 && (
                         <tr>
                           <td
                             colSpan={6}
-                            className="py-10 text-center text-slate-500"
+                            className="py-16 text-center text-slate-500 font-medium text-lg"
                           >
-                            No available books found.
+                            No available books found in this category.
                           </td>
                         </tr>
                       )}
@@ -709,7 +745,9 @@ function App() {
               </div>
             )}
 
+            {/* (Other Pages remain unchanged: borrowings, my-borrowings, history, profile) */}
             {currentPage === "borrowings" && userRole === "admin" && (
+              // ... existing code
               <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-xl border border-white/60 p-7">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                   <input
@@ -719,7 +757,6 @@ function App() {
                     onChange={(e) => setBorrowingSearch(e.target.value)}
                     className="w-full md:max-w-xl rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
                   />
-
                   <button
                     onClick={() => setBorrowModalOpen(true)}
                     className="px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-semibold shadow-lg hover:scale-[1.02] transition"
@@ -727,7 +764,6 @@ function App() {
                     New Borrowing
                   </button>
                 </div>
-
                 <div className="overflow-x-auto rounded-2xl">
                   <table className="w-full text-left min-w-[1100px]">
                     <thead>
@@ -774,24 +810,14 @@ function App() {
                             </td>
                             <td className="py-5 pr-4">
                               <span
-                                className={`text-xs px-4 py-2 rounded-full font-bold ${
-                                  isPending
-                                    ? "bg-slate-100 text-slate-600"
-                                    : "bg-emerald-100 text-emerald-700"
-                                }`}
+                                className={`text-xs px-4 py-2 rounded-full font-bold ${isPending ? "bg-slate-100 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}
                               >
                                 {isPending ? "Pending" : "Active"}
                               </span>
                             </td>
                             <td className="py-5 pr-4">
                               <span
-                                className={`text-xs px-4 py-2 rounded-full font-bold ${
-                                  isPending
-                                    ? "text-slate-400 bg-transparent px-0"
-                                    : (item.overdue_days || 0) > 0
-                                      ? "bg-red-100 text-red-700"
-                                      : "text-slate-600 bg-transparent px-0"
-                                }`}
+                                className={`text-xs px-4 py-2 rounded-full font-bold ${isPending ? "text-slate-400 bg-transparent px-0" : (item.overdue_days || 0) > 0 ? "bg-red-100 text-red-700" : "text-slate-600 bg-transparent px-0"}`}
                               >
                                 {isPending
                                   ? "-"
@@ -825,8 +851,7 @@ function App() {
                             </td>
                           </tr>
                         );
-                      })}
-
+                      })}{" "}
                       {filteredBorrowings.length === 0 && (
                         <tr>
                           <td
@@ -861,7 +886,6 @@ function App() {
                     className="w-full md:max-w-xl rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
                   />
                 </div>
-
                 <div className="overflow-x-auto rounded-2xl">
                   <table className="w-full text-left min-w-[1100px]">
                     <thead>
@@ -902,11 +926,7 @@ function App() {
                           </td>
                           <td className="py-5 pr-4">
                             <span
-                              className={`text-xs px-4 py-2 rounded-full font-bold ${
-                                (item.overdue_days || 0) > 0
-                                  ? "bg-red-100 text-red-700"
-                                  : "bg-emerald-100 text-emerald-700"
-                              }`}
+                              className={`text-xs px-4 py-2 rounded-full font-bold ${(item.overdue_days || 0) > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"}`}
                             >
                               {item.overdue_days || 0} day(s)
                             </span>
@@ -917,8 +937,7 @@ function App() {
                             </span>
                           </td>
                         </tr>
-                      ))}
-
+                      ))}{" "}
                       {filteredHistory.length === 0 && (
                         <tr>
                           <td
@@ -938,9 +957,10 @@ function App() {
             {currentPage === "profile" && (
               <Profilepage borrowings={borrowings} history={history} />
             )}
-          </>
+          </div>
         )}
 
+        {/* Modals */}
         {userRole === "admin" && (
           <>
             <BookFormModal
@@ -952,14 +972,12 @@ function App() {
               onSubmit={editingBook ? handleEditBook : handleCreateBook}
               editingBook={editingBook}
             />
-
             <BorrowFormModal
               open={borrowModalOpen}
               books={books}
               onClose={() => setBorrowModalOpen(false)}
               onSubmit={handleBorrowBook}
             />
-
             <ConfirmModal
               open={deleteBookId !== null}
               title="Delete Book"
@@ -971,17 +989,15 @@ function App() {
         )}
 
         {userRole === "borrower" && (
-          <>
-            <BorrowerBorrowModal
-              open={borrowModalOpen}
-              books={books}
-              onClose={() => {
-                setBorrowModalOpen(false);
-                setEditingBook(null);
-              }}
-              onSubmit={handleBorrowForMe}
-            />
-          </>
+          <BorrowerBorrowModal
+            open={borrowModalOpen}
+            books={books}
+            onClose={() => {
+              setBorrowModalOpen(false);
+              setEditingBook(null);
+            }}
+            onSubmit={handleBorrowForMe}
+          />
         )}
       </main>
     </div>
