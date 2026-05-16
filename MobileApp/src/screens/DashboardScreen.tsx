@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
+import ChatbotModal from '../components/ChatbotModal';
 
 interface DashboardScreenProps {
   setToken: (token: string | null) => void;
@@ -168,7 +169,7 @@ export default function DashboardScreen({ setToken, navigation }: DashboardScree
             )}
           </View>
         </ScrollView>
-
+            <ChatbotModal />
       </SafeAreaView>
     </LinearGradient>
   );

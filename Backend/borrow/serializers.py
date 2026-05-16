@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-
+from .models import KnowledgeBase, ChatMessage
 from rest_framework import serializers
 from .models import Book, Borrowing, History
 
@@ -81,4 +81,14 @@ class HistorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = History
+        fields = '__all__'
+
+class KnowledgeBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KnowledgeBase
+        fields = '__all__'
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
         fields = '__all__'

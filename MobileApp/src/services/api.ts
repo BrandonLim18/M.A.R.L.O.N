@@ -119,4 +119,9 @@ export const api = {
     const response = await apiClient.post("/borrowings/borrow_for_me/", data);
     return response.data;
   },
+
+  sendChatMessage: async (message: string) => {
+    const response = await apiClient.post('/chat/', { message });
+    return response.data;
+  },
 };

@@ -12,6 +12,7 @@ import VerifyEmail from "./components/VerifyEmail";
 import Profilepage from "./components/Profilepage";
 import { api, ProfileData } from "./services/api";
 import { Book, Borrowing, HistoryItem } from "./types";
+import Chatbot from "./components/Chatbot";
 
 const GENRES = [
   "All",
@@ -999,6 +1000,7 @@ function App() {
             onSubmit={handleBorrowForMe}
           />
         )}
+        <Chatbot />
       </main>
     </div>
   );

@@ -180,4 +180,14 @@ export const api = {
   logout: () => localStorage.removeItem("authToken"),
 
   isAuthenticated: () => !!localStorage.getItem("authToken"),
+
+sendChatMessage: async (message: string) => {
+    const res = await fetch(`${API_BASE}/chat/`, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ message }),
+    });
+    return handleResponse<any>(res);
+  },
+
 };

@@ -3,9 +3,12 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Book, Borrowing, History
-from .serializers import BookSerializer, BorrowingSerializer, HistorySerializer
+from .models import Book, Borrowing, History, KnowledgeBase, ChatMessage
+from .serializers import BookSerializer, BorrowingSerializer, HistorySerializer, KnowledgeBaseSerializer, ChatMessageSerializer
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, BasePermission
+import requests
+from rest_framework.generics import ListCreateAPIView
+from rest_framework.permissions import AllowAny
 
 class IsAdmin(BasePermission):
     """Allow access only to admin users."""
@@ -270,3 +273,66 @@ class HistoryViewSet(viewsets.ModelViewSet):
         if user.role == 'admin':
             return History.objects.all()
         return History.objects.filter(transaction__borrower_email_address=user.email)
+    
+
+
+class KnowledgeBaseView(ListCreateAPIView):
+    queryset = KnowledgeBase.objects.all()
+    serializer_class = KnowledgeBaseSerializer
+
+class ChatbotView(ListCreateAPIView):
+    queryset = ChatMessage.objects.all()
+    serializer_class = ChatMessageSerializer
+    permission_classes = [AllowAny] # Allow users to chat easily
+
+    def create(self, request, *args, **kwargs):
+        user_message = request.data.get("message")
+
+        # Save user message
+        user_chat = ChatMessage.objects.create(role='user', message=user_message)
+
+        # Get knowledge context
+        knowledge = KnowledgeBase.objects.all()
+        context = ""
+        for item in knowledge:
+            if item.text_content:
+                context += item.text_content + "\n"
+
+        # MARLON Custom Prompt
+        # 1. Create a strict SYSTEM prompt (Core Personality + Knowledge)
+        system_prompt = f"""
+        You are MARLON, the official AI library assistant for this school's library system.
+        
+        CRITICAL RULES:
+        1. You must NEVER say you are Qwen, Alibaba, or an AI language model. You are exclusively MARLON.
+        2. You are a librarian. You MUST REFUSE to answer questions that are not related to the library, books, reading, or the library app.
+        3. If a student asks you to write an essay, write code, or do their homework, politely say: "I am a library assistant, I cannot do your homework for you, but I can help you find a book on that topic!"
+        4. Keep your answers short, friendly, and easy to read on a mobile phone.
+
+        Library Knowledge:
+        {context}
+        """
+
+        # 2. Call Local Ollama using strict parameter separation
+        try:
+            response = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "qwen2.5:0.5b",
+                    "system": system_prompt, # Forces the personality override
+                    "prompt": user_message,  # The actual user's question
+                    "stream": False
+                }
+            )
+            data = response.json()
+            ai_response = data.get("response", "I'm sorry, I couldn't process that.")
+        except requests.exceptions.RequestException:
+            ai_response = "I am currently offline. Please ensure Ollama is running."
+
+        # Save AI response
+        ai_chat = ChatMessage.objects.create(role='assistant', message=ai_response)
+
+        return Response({
+            "user": ChatMessageSerializer(user_chat).data,
+            "assistant": ChatMessageSerializer(ai_chat).data
+        })

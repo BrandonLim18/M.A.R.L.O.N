@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Book, Borrowing, History
+from .models import Book, Borrowing, History, KnowledgeBase, ChatMessage
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
@@ -16,3 +16,14 @@ class BorrowingAdmin(admin.ModelAdmin):
 @admin.register(History)
 class HistoryAdmin(admin.ModelAdmin):
     list_display = ('id', 'transaction', 'borrow_date', 'return_date')
+
+@admin.register(KnowledgeBase)
+class KnowledgeBaseAdmin(admin.ModelAdmin):
+    list_display = ('title', 'created_at')
+    search_fields = ('title', 'text_content')
+
+@admin.register(ChatMessage)
+class ChatMessageAdmin(admin.ModelAdmin):
+    list_display = ('role', 'created_at')
+    list_filter = ('role',)
+    search_fields = ('message',)
