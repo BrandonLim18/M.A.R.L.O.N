@@ -1,6 +1,17 @@
 from django.db import models
 from datetime import date, timedelta
 
+
+GENRE_CHOICES = [
+    ('Romance', 'Romance'),
+    ('Fantasy', 'Fantasy'),
+    ('Science Fiction', 'Science Fiction'),
+    ('Historical Fiction', 'Historical Fiction'),
+    ('Networking & Systems Administration', 'Networking & Systems Administration'),
+    ('Programming & Software Development', 'Programming & Software Development'),
+    ('Other', 'Other'), 
+]
+
 # 1. Books Table
 class Book(models.Model):
     STATUS_CHOICES = [
@@ -21,6 +32,7 @@ class Book(models.Model):
     copies_borrowed = models.PositiveIntegerField(default=0)
     
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Available')
+    genre = models.CharField(max_length=100, choices=GENRE_CHOICES, default='Other', null=True, blank=True)
 
     def __str__(self):
         return f"{self.title} by {self.author} ({self.status})"
@@ -96,3 +108,6 @@ class History(models.Model):
         if due_date and end_date > due_date:
             return (end_date - due_date).days
         return 0
+    
+
+
