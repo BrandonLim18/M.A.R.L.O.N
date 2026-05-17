@@ -1,4 +1,4 @@
-# M.A.R.L.O.N. (Multimodal Automated Resource & Library Operations Network)
+# M.A.R.L.O.N. (Management and Access of Library Resources Online)
 
 M.A.R.L.O.N. is a next-generation, full-stack Library Management System (LMS) designed to streamline school library operations. It features a robust Python/Django backend administration dashboard, a responsive React web ecosystem for borrowers, and a cross-platform React Native (Expo) mobile application. 
 
