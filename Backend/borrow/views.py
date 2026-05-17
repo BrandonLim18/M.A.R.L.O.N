@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
+from django.db.models import Q
 from .models import Book, Borrowing, History, KnowledgeBase, ChatMessage
 from .serializers import BookSerializer, BorrowingSerializer, HistorySerializer, KnowledgeBaseSerializer, ChatMessageSerializer
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly, BasePermission
@@ -283,44 +283,99 @@ class KnowledgeBaseView(ListCreateAPIView):
 class ChatbotView(ListCreateAPIView):
     queryset = ChatMessage.objects.all()
     serializer_class = ChatMessageSerializer
-    permission_classes = [AllowAny] # Allow users to chat easily
+    permission_classes = [IsAuthenticated] # If using tokens, change to [IsAuthenticated] to securely get user data
 
     def create(self, request, *args, **kwargs):
-        user_message = request.data.get("message")
+        user_message = request.data.get("message", "").strip()
+        user_message_lower = user_message.lower()
 
-        # Save user message
+        # 1. Save user message
         user_chat = ChatMessage.objects.create(role='user', message=user_message)
 
-        # Get knowledge context
+        # 2. Get Static Knowledge (The Rules)
         knowledge = KnowledgeBase.objects.all()
-        context = ""
+        static_context = ""
         for item in knowledge:
             if item.text_content:
-                context += item.text_content + "\n"
+                static_context += item.text_content + "\n"
 
-        # MARLON Custom Prompt
-        # 1. Create a strict SYSTEM prompt (Core Personality + Knowledge)
+        # 3. BUILD DYNAMIC CONTEXT (The Magic Part!)
+        dynamic_context = ""
+
+        # A. Check Student's Account / Borrowed Books
+        if request.user.is_authenticated:
+            # Added __iexact to safely ignore uppercase/lowercase differences in emails!
+            my_books = Borrowing.objects.filter(borrower_email_address__iexact=request.user.email, return_date__isnull=True)
+            if my_books.exists():
+                dynamic_context += "STUDENT'S CURRENTLY BORROWED BOOKS:\n"
+                for b in my_books:
+                    dynamic_context += f"- Title: {b.book.title} | Due Date: {b.due_date} | Overdue Days: {b.overdue_days}\n"
+            else:
+                dynamic_context += "STUDENT'S CURRENTLY BORROWED BOOKS: You currently have 0 books borrowed.\n"
+
+        # B. Smart Book Search (Specific AND General)
+        user_message_clean = ''.join(char for char in user_message_lower if char.isalnum() or char.isspace())
+        
+        # Added 'borrowed', 'borrow', 'my', 'i', and 'do' to ignored words
+        ignored_words = [
+            'what', 'where', 'have', 'does', 'do', 'book', 'books', 'show', 'list', 
+            'available', 'availabe', 'avaialbe', 'some', 'any', 'library', 
+            'right', 'now', 'please', 'tell', 'can', 'you', 'just', 'are', 'is', 'the',
+            'borrowed', 'borrow', 'my', 'i'
+        ]
+        
+        search_words = [w for w in user_message_clean.split() if len(w) > 3 and w not in ignored_words]
+        general_keywords = ['what book', 'what books', 'available', 'availabe', 'avaialbe', 'catalog', 'list', 'show me']
+
+        # Prevent searching the catalog if they are asking about their personal account
+        is_asking_about_account = "my" in user_message_lower or "i have" in user_message_lower or "do i" in user_message_lower
+
+        if search_words and not is_asking_about_account:
+            # A. SPECIFIC SEARCH
+            query = Q()
+            for word in search_words:
+                query |= Q(title__icontains=word) | Q(author__icontains=word) | Q(genre__icontains=word)
+            
+            matching_books = Book.objects.filter(query).distinct()[:5]
+            if matching_books.exists():
+                dynamic_context += "\nLIBRARY CATALOG SEARCH RESULTS:\n"
+                for book in matching_books:
+                    dynamic_context += f"- Title: {book.title} | Author: {book.author} | Status: {book.status} | Copies Available: {book.copies_available}\n"
+                
+        elif any(keyword in user_message_lower for keyword in general_keywords) and not is_asking_about_account:
+            # B. GENERAL SEARCH
+            available_books = Book.objects.filter(status='Available').order_by('-id')[:5] 
+            if available_books.exists():
+                dynamic_context += "\nGENERAL AVAILABLE BOOKS:\n"
+                for book in available_books:
+                    dynamic_context += f"- Title: {book.title} | Author: {book.author} | Genre: {book.genre}\n"
+
+        # 4. The Master Prompt
         system_prompt = f"""
-        You are MARLON, the official AI library assistant for this school's library system.
+        You are MARLON, the official AI library assistant. 
         
         CRITICAL RULES:
-        1. You must NEVER say you are Qwen, Alibaba, or an AI language model. You are exclusively MARLON.
-        2. You are a librarian. You MUST REFUSE to answer questions that are not related to the library, books, reading, or the library app.
-        3. If a student asks you to write an essay, write code, or do their homework, politely say: "I am a library assistant, I cannot do your homework for you, but I can help you find a book on that topic!"
-        4. Keep your answers short, friendly, and easy to read on a mobile phone.
+        1. You are MARLON. Never say you are an AI model.
+        2. KEEP ANSWERS EXTREMELY SHORT AND CONCISE. Maximum 2 to 3 sentences.
+        3. If you are listing books, ALWAYS use a simple bulleted list. 
+        4. NEVER write long paragraphs explaining book categories or sections.
+        5. IF THE STUDENT ASKS ABOUT THEIR BORROWED BOOKS, ONLY read the data from "STUDENT'S CURRENTLY BORROWED BOOKS". Do not read the general library rules.
 
-        Library Knowledge:
-        {context}
+        [General Library Rules]
+        {static_context}
+
+        [Live Database Information]
+        {dynamic_context}
         """
 
-        # 2. Call Local Ollama using strict parameter separation
+        # 5. Call Local Ollama
         try:
             response = requests.post(
                 "http://localhost:11434/api/generate",
                 json={
                     "model": "qwen2.5:0.5b",
-                    "system": system_prompt, # Forces the personality override
-                    "prompt": user_message,  # The actual user's question
+                    "system": system_prompt,
+                    "prompt": user_message,
                     "stream": False
                 }
             )
@@ -329,7 +384,7 @@ class ChatbotView(ListCreateAPIView):
         except requests.exceptions.RequestException:
             ai_response = "I am currently offline. Please ensure Ollama is running."
 
-        # Save AI response
+        # 6. Save and Return AI response
         ai_chat = ChatMessage.objects.create(role='assistant', message=ai_response)
 
         return Response({
