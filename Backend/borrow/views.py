@@ -371,7 +371,7 @@ class ChatbotView(ListCreateAPIView):
         # 5. Call Local Ollama
         try:
             response = requests.post(
-                "http://localhost:11434/api/generate",
+                "http://127.0.0.1:11434/api/generate",
                 json={
                     "model": "qwen2.5:0.5b",
                     "system": system_prompt,
