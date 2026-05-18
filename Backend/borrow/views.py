@@ -316,7 +316,7 @@ class ChatbotView(ListCreateAPIView):
         # 2. Call Local Ollama using strict parameter separation
         try:
             response = requests.post(
-                "http://localhost:11434/api/generate",
+                "http://127.0.0.1:11434/api/generate",
                 json={
                     "model": "qwen2.5:0.5b",
                     "system": system_prompt, # Forces the personality override
