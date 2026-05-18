@@ -26,6 +26,24 @@ export default function ChatbotModal() {
     setLoading(false);
   };
 
+  const clearChat = () => {
+    setMessages([{ role: "assistant", text: "Chat cleared! How can I help you today?" }]);
+  };
+
+  const handleQuickReply = async (text: string) => {
+    const userMsg = { role: "user", text };
+    setMessages(prev => [...prev, userMsg]);
+    setLoading(true);
+
+    try {
+      const res = await api.sendChatMessage(text);
+      setMessages(prev => [...prev, { role: "assistant", text: res.assistant.message }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { role: "assistant", text: "Server error. Is Ollama running?" }]);
+    }
+    setLoading(false);
+  };
+
   return (
     <>
       <TouchableOpacity style={styles.fab} onPress={() => setIsOpen(true)}>
@@ -74,6 +92,21 @@ export default function ChatbotModal() {
               </TouchableOpacity>
             </View>
           </View>
+          
+          <View style={styles.header}>
+              <View>
+                <Text style={styles.headerTitle}>MARLON AI</Text>
+                <Text style={styles.headerSubtitle}>Library Assistant</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
+                <TouchableOpacity onPress={clearChat}>
+                  <Text style={{ color: '#fff', fontSize: 12, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>Clear</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsOpen(false)} style={styles.closeBtn}>
+                  <Ionicons name="close" size={24} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
         </KeyboardAvoidingView>
       </Modal>
     </>
